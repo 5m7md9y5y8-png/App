@@ -1,1 +1,112 @@
-import { Audio } from 'expo-av';\nimport * as FileSystem from 'expo-file-system';\n\ninterface ConversionOptions {\n  targetFrequency: number;\n  sampleRate?: number;\n  duration?: number;\n  amplitude?: number;\n  fadeInMs?: number;\n  fadeOutMs?: number;\n}\n\nclass FrequencyConverter {\n  private static readonly SAMPLE_RATE = 44100;\n  private static readonly BUFFER_SIZE = 4096;\n\n  /**\n   * Convert a sound file to a pure frequency tone\n   * @param sourceFile Path to the source audio file\n   * @param targetFrequency Target frequency in Hz\n   * @returns Path to the converted audio file\n   */\n  static async convertToFrequency(\n    sourceFile: string,\n    targetFrequency: number\n  ): Promise<string> {\n    try {\n      // Generate smooth, pure sine wave at target frequency with gentle envelope\n      const audioBuffer = this.generateSmoothPureTone(\n        targetFrequency,\n        2000, // 2 second duration for smooth listening\n        this.SAMPLE_RATE,\n        0.15, // Lower amplitude (15%) for non-harsh sound\n        300, // 300ms fade in\n        300 // 300ms fade out\n      );\n\n      // Save the generated tone\n      const outputPath = `${FileSystem.cacheDirectory}converted_${targetFrequency}hz.wav`;\n      await this.saveAudioBuffer(outputPath, audioBuffer);\n\n      return outputPath;\n    } catch (error) {\n      console.error('Frequency conversion error:', error);\n      throw error;\n    }\n  }\n\n  /**\n   * Generate a smooth, pure sine wave with gentle envelope (not loud/harsh)\n   * @param frequency Frequency in Hz\n   * @param durationMs Duration in milliseconds\n   * @param sampleRate Sample rate in Hz\n   * @param amplitude Amplitude (0.0-1.0), lower for softer sound\n   * @param fadeInMs Fade in duration\n   * @param fadeOutMs Fade out duration\n   * @returns Audio buffer as Float32Array\n   */\n  private static generateSmoothPureTone(\n    frequency: number,\n    durationMs: number,\n    sampleRate: number,\n    amplitude: number = 0.15,\n    fadeInMs: number = 300,\n    fadeOutMs: number = 300\n  ): Float32Array {\n    const numSamples = Math.floor((sampleRate * durationMs) / 1000);\n    const buffer = new Float32Array(numSamples);\n    const TWO_PI = 2 * Math.PI;\n\n    const fadeInSamples = Math.floor((sampleRate * fadeInMs) / 1000);\n    const fadeOutSamples = Math.floor((sampleRate * fadeOutMs) / 1000);\n    const fadeSustainStart = fadeInSamples;\n    const fadeSustainEnd = numSamples - fadeOutSamples;\n\n    for (let i = 0; i < numSamples; i++) {\n      const t = i / sampleRate;\n      let sample = Math.sin(TWO_PI * frequency * t);\n\n      // Apply fade envelope for smooth attack and release\n      if (i < fadeInSamples) {\n        // Fade in with ease-in curve\n        const fadeProgress = i / fadeInSamples;\n        const easeInCurve = fadeProgress * fadeProgress; // Quadratic ease-in\n        sample *= easeInCurve;\n      } else if (i > fadeSustainEnd) {\n        // Fade out with ease-out curve\n        const remainingSamples = numSamples - i;\n        const fadeProgress = remainingSamples / fadeOutSamples;\n        const easeOutCurve = fadeProgress * fadeProgress; // Quadratic ease-out\n        sample *= easeOutCurve;\n      }\n\n      buffer[i] = amplitude * sample;\n    }\n\n    return buffer;\n  }\n\n  /**\n   * Generate multiple pure tones mixed together for richer sound\n   * @param baseFrequency Base frequency in Hz\n   * @param durationMs Duration in milliseconds\n   * @returns Audio buffer with mixed harmonics\n   */\n  static generateHarmonicTone(\n    baseFrequency: number,\n    durationMs: number = 2000\n  ): Float32Array {\n    const numSamples = Math.floor((this.SAMPLE_RATE * durationMs) / 1000);\n    const buffer = new Float32Array(numSamples);\n    const TWO_PI = 2 * Math.PI;\n    const amplitude = 0.12; // Softer for mixed harmonics\n\n    const fadeInSamples = Math.floor((this.SAMPLE_RATE * 300) / 1000);\n    const fadeOutSamples = Math.floor((this.SAMPLE_RATE * 300) / 1000);\n    const fadeSustainEnd = numSamples - fadeOutSamples;\n\n    // Mix fundamental, octave, and fifth for pleasant tone\n    const harmonics = [\n      { freq: baseFrequency, weight: 0.5 }, // Fundamental\n      { freq: baseFrequency * 2, weight: 0.3 }, // Octave\n      { freq: baseFrequency * 1.5, weight: 0.2 }, // Perfect fifth\n    ];\n\n    for (let i = 0; i < numSamples; i++) {\n      const t = i / this.SAMPLE_RATE;\n      let sample = 0;\n\n      // Mix all harmonics\n      for (const harmonic of harmonics) {\n        sample += harmonic.weight * Math.sin(TWO_PI * harmonic.freq * t);\n      }\n\n      // Apply fade envelope\n      if (i < fadeInSamples) {\n        const fadeProgress = i / fadeInSamples;\n        sample *= fadeProgress * fadeProgress;\n      } else if (i > fadeSustainEnd) {\n        const remainingSamples = numSamples - i;\n        const fadeProgress = remainingSamples / fadeOutSamples;\n        sample *= fadeProgress * fadeProgress;\n      }\n\n      buffer[i] = amplitude * sample;\n    }\n\n    return buffer;\n  }\n\n  /**\n   * Generate a chirp/sweep tone (ascending frequency sweep)\n   * @param startFrequency Starting frequency in Hz\n   * @param endFrequency Ending frequency in Hz\n   * @param durationMs Duration in milliseconds\n   * @returns Audio buffer with frequency sweep\n   */\n  static generateChirpTone(\n    startFrequency: number,\n    endFrequency: number,\n    durationMs: number = 1500\n  ): Float32Array {\n    const numSamples = Math.floor((this.SAMPLE_RATE * durationMs) / 1000);\n    const buffer = new Float32Array(numSamples);\n    const TWO_PI = 2 * Math.PI;\n    const amplitude = 0.12;\n\n    const fadeInSamples = Math.floor((this.SAMPLE_RATE * 200) / 1000);\n    const fadeOutSamples = Math.floor((this.SAMPLE_RATE * 200) / 1000);\n    const fadeSustainEnd = numSamples - fadeOutSamples;\n\n    for (let i = 0; i < numSamples; i++) {\n      const t = i / this.SAMPLE_RATE;\n      const progress = t / (durationMs / 1000);\n\n      // Linear frequency sweep\n      const frequency = startFrequency + (endFrequency - startFrequency) * progress;\n      let sample = Math.sin(TWO_PI * frequency * t);\n\n      // Apply fade envelope\n      if (i < fadeInSamples) {\n        const fadeProgress = i / fadeInSamples;\n        sample *= fadeProgress * fadeProgress;\n      } else if (i > fadeSustainEnd) {\n        const remainingSamples = numSamples - i;\n        const fadeProgress = remainingSamples / fadeOutSamples;\n        sample *= fadeProgress * fadeProgress;\n      }\n\n      buffer[i] = amplitude * sample;\n    }\n\n    return buffer;\n  }\n\n  /**\n   * Apply frequency shift to existing audio\n   * This creates an overlay of the original sound with the target frequency\n   */\n  static async applyFrequencyShift(\n    sourceFile: string,\n    baseFrequency: number,\n    targetFrequency: number\n  ): Promise<string> {\n    try {\n      // Load the source audio\n      const sound = new Audio.Sound();\n      await sound.loadAsync({ uri: sourceFile });\n\n      const status = await sound.getStatusAsync();\n      const durationMs = status.durationMillis || 2000;\n\n      // Generate target frequency tone with smooth envelope\n      const targetTone = this.generateSmoothPureTone(\n        targetFrequency,\n        durationMs,\n        this.SAMPLE_RATE,\n        0.15,\n        300,\n        300\n      );\n\n      // Save the combined audio\n      const outputPath = `${FileSystem.cacheDirectory}shifted_${targetFrequency}hz.wav`;\n      await this.saveAudioBuffer(outputPath, targetTone);\n\n      await sound.unloadAsync();\n      return outputPath;\n    } catch (error) {\n      console.error('Frequency shift error:', error);\n      throw error;\n    }\n  }\n\n  /**\n   * Save audio buffer to WAV file\n   */\n  private static async saveAudioBuffer(\n    filePath: string,\n    buffer: Float32Array\n  ): Promise<void> {\n    // Convert Float32Array to WAV format\n    const wavData = this.encodeWAV(buffer, this.SAMPLE_RATE);\n    const base64 = this.uint8ArrayToBase64(wavData);\n\n    await FileSystem.writeAsStringAsync(filePath, base64, {\n      encoding: FileSystem.EncodingType.Base64,\n    });\n  }\n\n  /**\n   * Encode PCM audio data to WAV format\n   */\n  private static encodeWAV(\n    samples: Float32Array,\n    sampleRate: number\n  ): Uint8Array {\n    const channelCount = 1;\n    const bytesPerSample = 2;\n\n    const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);\n    const view = new DataView(buffer);\n\n    // WAV header\n    const writeString = (offset: number, string: string) => {\n      for (let i = 0; i < string.length; i++) {\n        view.setUint8(offset + i, string.charCodeAt(i));\n      }\n    };\n\n    writeString(0, 'RIFF');\n    view.setUint32(4, 36 + samples.length * bytesPerSample, true);\n    writeString(8, 'WAVE');\n    writeString(12, 'fmt ');\n    view.setUint32(16, 16, true);\n    view.setUint16(20, 1, true); // PCM format\n    view.setUint16(22, channelCount, true);\n    view.setUint32(24, sampleRate, true);\n    view.setUint32(28, sampleRate * channelCount * bytesPerSample, true);\n    view.setUint16(32, channelCount * bytesPerSample, true);\n    view.setUint16(34, 16, true); // Bits per sample\n    writeString(36, 'data');\n    view.setUint32(40, samples.length * bytesPerSample, true);\n\n    // Convert float samples to PCM\n    let offset = 44;\n    for (let i = 0; i < samples.length; i++) {\n      const sample = Math.max(-1, Math.min(1, samples[i]));\n      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);\n      offset += bytesPerSample;\n    }\n\n    return new Uint8Array(buffer);\n  }\n\n  /**\n   * Convert Uint8Array to Base64 string\n   */\n  private static uint8ArrayToBase64(arr: Uint8Array): string {\n    let binary = '';\n    for (let i = 0; i < arr.length; i++) {\n      binary += String.fromCharCode(arr[i]);\n    }\n    return btoa(binary);\n  }\n}\n\nexport default FrequencyConverter;\n
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
+
+interface ConversionOptions {
+  targetFrequency: number; // Hz
+  sampleRate?: number; // samples per second, default 44100
+  duration?: number; // milliseconds, default 1000
+  amplitude?: number; // 0..1, default 0.3
+}
+
+export class FrequencyConverter {
+  async convert(options: ConversionOptions): Promise<{ uri: string }> {
+    const { targetFrequency, sampleRate = 44100, duration = 1000, amplitude = 0.3 } = options;
+
+    if (typeof targetFrequency !== 'number' || !isFinite(targetFrequency) || targetFrequency <= 0) {
+      throw new Error('Invalid targetFrequency. Must be a positive number in Hz.');
+    }
+    if (sampleRate <= 0) throw new Error('Invalid sampleRate. Must be a positive integer.');
+    if (duration <= 0) throw new Error('Invalid duration. Must be a positive number (ms).');
+    if (amplitude <= 0 || amplitude > 1) throw new Error('Invalid amplitude. Must be in (0,1].');
+
+    const numSamples = Math.floor((sampleRate * duration) / 1000);
+
+    // Generate PCM 16-bit samples (sine wave)
+    const samples = new Int16Array(numSamples);
+    const twoPiF = 2 * Math.PI * targetFrequency;
+    for (let i = 0; i < numSamples; i++) {
+      const t = i / sampleRate;
+      const sample = Math.sin(twoPiF * t);
+      // scale to 16-bit signed integer
+      samples[i] = Math.max(-1, Math.min(1, sample * amplitude)) * 0x7fff;
+    }
+
+    const wavBuffer = this._encodeWav(samples, sampleRate);
+
+    // Convert to base64 for expo-file-system write
+    let base64: string;
+    try {
+      // Node/React Native environment usually provides Buffer
+      // @ts-ignore
+      base64 = Buffer.from(wavBuffer).toString('base64');
+    } catch (e) {
+      // Fallback: use manual base64 (should rarely be needed)
+      base64 = this._uint8ArrayToBase64(wavBuffer);
+    }
+
+    const fileName = `frequency-${targetFrequency}Hz-${Date.now()}.wav`;
+    const fileUri = (FileSystem.documentDirectory || '') + fileName;
+
+    // Write file as base64
+    await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+
+    return { uri: fileUri };
+  }
+
+  _encodeWav(samples: Int16Array, sampleRate: number): Uint8Array {
+    const blockAlign = 2; // 16-bit mono
+    const byteRate = sampleRate * blockAlign;
+    const dataSize = samples.length * 2;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    /* RIFF identifier */ writeString(view, 0, 'RIFF');
+    /* file length */ view.setUint32(4, 36 + dataSize, true);
+    /* RIFF type */ writeString(view, 8, 'WAVE');
+    /* format chunk identifier */ writeString(view, 12, 'fmt ');
+    /* format chunk length */ view.setUint32(16, 16, true);
+    /* sample format (raw) */ view.setUint16(20, 1, true);
+    /* channel count */ view.setUint16(22, 1, true);
+    /* sample rate */ view.setUint32(24, sampleRate, true);
+    /* byte rate (sampleRate * blockAlign) */ view.setUint32(28, byteRate, true);
+    /* block align (channel count * bytes per sample) */ view.setUint16(32, blockAlign, true);
+    /* bits per sample */ view.setUint16(34, 16, true);
+    /* data chunk identifier */ writeString(view, 36, 'data');
+    /* data chunk length */ view.setUint32(40, dataSize, true);
+
+    // PCM samples
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+      view.setInt16(offset, samples[i], true);
+    }
+
+    return new Uint8Array(buffer);
+
+    function writeString(dataview: DataView, offset: number, str: string) {
+      for (let i = 0; i < str.length; i++) {
+        dataview.setUint8(offset + i, str.charCodeAt(i));
+      }
+    }
+  }
+
+  _uint8ArrayToBase64(u8Arr: Uint8Array): string {
+    let CHUNK_SIZE = 0x8000; // arbitrary chunk size
+    let index = 0;
+    const length = u8Arr.length;
+    let result = '';
+    let slice;
+    while (index < length) {
+      slice = u8Arr.subarray(index, Math.min(index + CHUNK_SIZE, length));
+      result += String.fromCharCode.apply(null, Array.from(slice));
+      index += CHUNK_SIZE;
+    }
+    // btoa is not available in Node; try to use Buffer if possible
+    try {
+      // @ts-ignore
+      return btoa(result);
+    } catch (e) {
+      // @ts-ignore
+      return Buffer.from(result, 'binary').toString('base64');
+    }
+  }
+}
